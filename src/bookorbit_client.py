@@ -1,0 +1,56 @@
+from typing import Iterator
+
+import requests
+
+PAGE_SIZE = 200
+
+
+class BookOrbitClient:
+    def __init__(self, base_url: str, api_key: str):
+        self.base_url = base_url
+        self.session = requests.Session()
+        self.session.headers["Authorization"] = f"Bearer {api_key}"
+
+    def iter_books(self) -> Iterator[dict]:
+        """Yields every book's summary row (includes tags and files[]), paginated."""
+        page = 0
+        while True:
+            resp = self.session.post(
+                f"{self.base_url}/api/v1/books/query",
+                json={"pagination": {"page": page, "size": PAGE_SIZE}},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            rows = data.get("items", data.get("books", data if isinstance(data, list) else []))
+            if not rows:
+                return
+            for row in rows:
+                yield row
+            if len(rows) < PAGE_SIZE:
+                return
+            page += 1
+
+    def bulk_update_tags(self, book_ids: list[int], mode: str, tags: list[str]) -> None:
+        resp = self.session.post(
+            f"{self.base_url}/api/v1/books/bulk-update-tags",
+            json={"bookIds": book_ids, "mode": mode, "tags": tags},
+            timeout=30,
+        )
+        resp.raise_for_status()
+
+    def download_file(self, file_id: int) -> bytes:
+        resp = self.session.get(
+            f"{self.base_url}/api/v1/books/files/{file_id}/download", timeout=120
+        )
+        resp.raise_for_status()
+        return resp.content
+
+    def get_cover(self, book_id: int) -> bytes | None:
+        resp = self.session.get(
+            f"{self.base_url}/api/v1/books/{book_id}/cover", timeout=30
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.content

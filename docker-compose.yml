@@ -1,0 +1,10 @@
+services:
+  bookorbit-kokoro-audiobook:
+    build: .
+    container_name: bookorbit-kokoro-audiobook
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+      # Point this at BookOrbit's actual Book Dock host folder.
+      - /DATA/AppData/bookorbit/data/app/book-dock:/book-dock
