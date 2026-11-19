@@ -20,6 +20,12 @@ class Config:
     auto_publish_read_aloud: bool
     book_dock_import_timeout_seconds: int
     read_aloud_job_timeout_seconds: int
+    gpu_kokoro_url: str | None
+    gpu_wol_mac: str | None
+    gpu_wol_broadcast_address: str
+    gpu_wol_port: int
+    gpu_wake_timeout_seconds: int
+    gpu_wake_poll_interval_seconds: int
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -51,4 +57,10 @@ def load() -> Config:
         auto_publish_read_aloud=_bool_env("AUTO_PUBLISH_READ_ALOUD", False),
         book_dock_import_timeout_seconds=int(os.environ.get("BOOK_DOCK_IMPORT_TIMEOUT_SECONDS", "300")),
         read_aloud_job_timeout_seconds=int(os.environ.get("READ_ALOUD_JOB_TIMEOUT_SECONDS", "1800")),
+        gpu_kokoro_url=(os.environ.get("GPU_KOKORO_URL") or "").rstrip("/") or None,
+        gpu_wol_mac=os.environ.get("GPU_WOL_MAC") or None,
+        gpu_wol_broadcast_address=os.environ.get("GPU_WOL_BROADCAST_ADDRESS", "255.255.255.255"),
+        gpu_wol_port=int(os.environ.get("GPU_WOL_PORT", "9")),
+        gpu_wake_timeout_seconds=int(os.environ.get("GPU_WAKE_TIMEOUT_SECONDS", "120")),
+        gpu_wake_poll_interval_seconds=int(os.environ.get("GPU_WAKE_POLL_INTERVAL_SECONDS", "5")),
     )

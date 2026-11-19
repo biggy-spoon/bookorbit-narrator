@@ -56,6 +56,18 @@ See `.env.example` for every setting (tag names, poll interval, default voice, T
 voice per book by tagging it `voice:<id>` (list available voices with
 `curl $KOKORO_URL/audio/voices`) — otherwise `DEFAULT_VOICE` is used.
 
+## Optional: offload to a second, faster machine (e.g. a GPU box)
+
+Kokoro-82M is small enough to run on CPU, but it's genuinely slow that way - expect well over an hour for
+a full-length novel on a typical server CPU. If you have a second machine with a GPU that's normally
+asleep, set `GPU_KOKORO_URL` (and optionally `GPU_WOL_MAC` for Wake-on-LAN) in `.env` and run a second
+Kokoro-FastAPI instance there. The sidecar will try that machine first for each book, wake it if configured
+to, and transparently fall back to your regular `KOKORO_URL` if it doesn't answer in time - so this is
+purely a speed optimization, never a dependency. See `.env.example` for the full variable list and an
+important caveat about *how* a Wake-on-LAN packet actually has to reach the sleeping machine on your
+specific network (same LAN, a router that forwards it, etc.) - that part is unavoidably your own network's
+setup, not something this project can do for you.
+
 ## Known limitations
 
 - No "seamless switch between reading and listening at the same spot" sync — chapter-level audiobooks
