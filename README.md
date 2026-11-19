@@ -56,63 +56,6 @@ See `.env.example` for every setting (tag names, poll interval, default voice, T
 voice per book by tagging it `voice:<id>` (list available voices with
 `curl $KOKORO_URL/audio/voices`) — otherwise `DEFAULT_VOICE` is used.
 
-## Optional: offload to a second, faster machine (e.g. a GPU box)
-
-Kokoro-82M is small enough to run on CPU, but it's genuinely slow that way - expect well over an hour for
-a full-length novel on a typical server CPU. If you have a second machine with a GPU that's normally
-asleep, set `GPU_KOKORO_URL` (and optionally `GPU_WOL_MAC` for Wake-on-LAN) in `.env` and run a second
-Kokoro-FastAPI instance there. The sidecar will try that machine first for each book, wake it if configured
-to, and transparently fall back to your regular `KOKORO_URL` if it doesn't answer in time - so this is
-purely a speed optimization, never a dependency. See `.env.example` for the full variable list and an
-important caveat about *how* a Wake-on-LAN packet actually has to reach the sleeping machine on your
-specific network (same LAN, a router that forwards it, etc.) - that part is unavoidably your own network's
-setup, not something this project can do for you.
-
-### Troubleshooting: Windows GPU host crashes/hangs a few seconds after inference
-
-If your GPU backend runs on Windows via Docker Desktop + WSL2 (the common setup for a spare gaming PC),
-and the whole machine hangs or silently reboots **not during inference, but a handful of seconds after a
-burst of GPU activity ends**, this is very likely **PCIe ASPM (Active State Power Management)**. A few
-seconds of GPU idle is exactly the kind of gap that triggers the OS/motherboard to drop the GPU's PCIe
-link into a low-power link state (L1/L1 substates); that transition, combined with WSL2's virtualized GPU
-compute path (GPU-PV) still holding the device open, hit a real crash/hang for us twice in a row under a
-sustained synthetic load test, and holding `nvidia-smi`-level utilization/temperature/power logging through
-the exact failure window confirmed the timing: healthy load, healthy idle, then dead ~19 seconds into idle,
-every time - not during the load itself.
-
-Disabling ASPM for the PCIe subsystem fixed it for us (survived the identical test twice after the change,
-having failed twice before it, with nothing else different). On the Windows GPU host, as Administrator:
-
-```powershell
-powercfg /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0
-powercfg /setdcvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0
-powercfg /setactive SCHEME_CURRENT
-```
-
-No reboot needed. If you hit intermittent Windows GPU-host crashes with this setup and the timing looks
-similar (fine during inference, dies a few seconds after it stops), try this before suspecting the GPU
-driver, thermals, or power supply - in our case none of those showed any corroborating evidence (no driver
-fault events, no crash dump, temperatures stayed well within normal range), which is itself a symptom of an
-ASPM-class issue: it typically leaves no trace in Windows's own crash reporting.
-
-**Update: none of this fully solved it for us, after real effort.** We tried, in order: disabling ASPM
-(above - genuinely survived two rounds of synthetic stress testing that had reliably crashed the host
-before it), updating the NVIDIA driver, and capping the GPU's power limit (`nvidia-smi -pl <watts>`, well
-below its default). Each change measurably *delayed* the failure - from crashing within ~2-3 minutes of
-sustained load, to surviving past 20 minutes and 68%+ of a real audiobook conversion - but a real,
-multi-chapter conversion eventually crashed the host every single time we tried it, five times total across
-all these mitigations. One attempt failed differently and instructively: a `CUDA error: unknown error`
-*inside* the container, recoverable with a container restart, no host crash - suggesting the underlying
-instability is real and the mitigations above do reduce its severity/frequency, just not enough to trust it.
-
-**Our conclusion: WSL2 GPU-PV on Windows is not currently reliable enough for sustained TTS workloads of
-realistic length**, on this hardware and driver combination, despite substantial effort to fix it. If
-you're on Windows, we'd suggest not relying on GPU offload for anything you can't afford to fail partway
-through, and watching for future driver/WSL releases that might address GPU-PV stability under sustained
-compute. If you have a native Linux GPU host available, this project's `GPU_KOKORO_URL` works with any
-OpenAI-compatible Kokoro instance, and a real GPU driver (no virtualization layer in between) should not
-have any of these problems.
-
 ## Known limitations
 
 - No "seamless switch between reading and listening at the same spot" sync — chapter-level audiobooks
@@ -120,8 +63,31 @@ have any of these problems.
   feature.
 - Chapter detection relies on the EPUB's own spine order and skips documents under ~200 characters of text
   (covers, title pages, nav) — unusually structured EPUBs may need tuning in `src/epub.py`.
-- One book is converted at a time; a long book can take a while depending on your Kokoro instance's
-  throughput (CPU vs GPU).
+- One book is converted at a time. On CPU, a full novel realistically takes **1.5-2.5 hours** depending on
+  your server's CPU — this is the supported, reliable path today.
+
+## Future feature: GPU offload (experimental, not recommended yet)
+
+The code for this already exists (`GPU_KOKORO_URL`, `GPU_WOL_MAC`, and friends in `.env.example`) and is
+fully optional - it's a no-op for everyone unless you set `GPU_KOKORO_URL`, so it costs nothing to leave in
+place. The idea: point it at a second, GPU-equipped Kokoro-FastAPI instance (optionally woken via
+Wake-on-LAN) and the sidecar uses it instead of your CPU instance when reachable, falling back to CPU
+automatically otherwise.
+
+**Status: works great on a native Linux GPU host. Not yet reliable on Windows + WSL2 + Docker Desktop**,
+which is the common "spare gaming PC" setup. We tried this extensively - disabling PCIe ASPM (genuinely
+fixed one real, confirmed failure mode), updating the NVIDIA driver, and capping the GPU's power limit.
+Each change meaningfully *delayed* the crash (from ~2-3 minutes of sustained inference to 20+ minutes and
+68%+ through a real conversion), but a real multi-chapter book eventually crashed the Windows host every
+time we tried it end to end, across five attempts with every mitigation in place - always the same
+signature (no bugcheck, no driver fault event, no crash dump - a true unexplained hard hang characteristic
+of a GPU-PV virtualization bug, not something a config change on our end can fully resolve).
+
+If you want to pick this up: a native Linux GPU host (no virtualization layer between the container and
+the driver) should sidestep this entirely and is the path we'd actually recommend if you have one available.
+If you're on Windows and want to help debug the deeper issue, the `nvidia-smi`-polling + `docker logs`
+technique we used to characterize the failures (see the commit history) is the place to start - we ran out
+of configuration-level ideas, not patience.
 
 ## License
 
