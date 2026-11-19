@@ -109,16 +109,27 @@ def process_book(
         chapters = parse_chapters(epub_bytes)
         if not chapters:
             raise RuntimeError("no narratable chapters found in EPUB")
+        total_chars = sum(len(ch.text) for ch in chapters)
+        logger.info(
+            "book %s (%s): %d chapters, %d characters to narrate",
+            book_id, title, len(chapters), total_chars,
+        )
 
         voice = _voice_for(book.get("tags") or [], config.default_voice)
         cover = client.get_cover(book_id)
 
         with tempfile.TemporaryDirectory() as work_dir_str:
             work_dir = Path(work_dir_str)
-            rendered = [
-                synthesize_chapter(ch, voice, kokoro, work_dir, i, config.max_chars_per_request)
-                for i, ch in enumerate(chapters)
-            ]
+            rendered = []
+            for i, ch in enumerate(chapters, start=1):
+                started = time.monotonic()
+                rendered.append(
+                    synthesize_chapter(ch, voice, kokoro, work_dir, i, config.max_chars_per_request)
+                )
+                logger.info(
+                    "book %s (%s): chapter %d/%d '%s' narrated in %.0fs",
+                    book_id, title, i, len(chapters), ch.title, time.monotonic() - started,
+                )
 
             output_name = _safe_filename(f"{title} - {author}") + ".m4b"
             output_path = Path(config.book_dock_path) / output_name
