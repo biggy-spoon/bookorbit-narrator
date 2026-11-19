@@ -16,6 +16,17 @@ class Config:
     max_chars_per_request: int
     book_dock_path: str
     state_db_path: str
+    generate_read_aloud: bool
+    auto_publish_read_aloud: bool
+    book_dock_import_timeout_seconds: int
+    read_aloud_job_timeout_seconds: int
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
 def load() -> Config:
@@ -36,4 +47,8 @@ def load() -> Config:
         max_chars_per_request=int(os.environ.get("MAX_CHARS_PER_REQUEST", "1000")),
         book_dock_path=os.environ.get("BOOK_DOCK_PATH", "/book-dock"),
         state_db_path=os.environ.get("STATE_DB_PATH", "/data/state.db"),
+        generate_read_aloud=_bool_env("GENERATE_READ_ALOUD", True),
+        auto_publish_read_aloud=_bool_env("AUTO_PUBLISH_READ_ALOUD", False),
+        book_dock_import_timeout_seconds=int(os.environ.get("BOOK_DOCK_IMPORT_TIMEOUT_SECONDS", "300")),
+        read_aloud_job_timeout_seconds=int(os.environ.get("READ_ALOUD_JOB_TIMEOUT_SECONDS", "1800")),
     )

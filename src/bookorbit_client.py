@@ -54,3 +54,31 @@ class BookOrbitClient:
             return None
         resp.raise_for_status()
         return resp.content
+
+    def read_aloud_capability(self, book_id: int) -> dict:
+        resp = self.session.get(
+            f"{self.base_url}/api/v1/books/{book_id}/read-aloud", timeout=30
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def create_read_aloud_job(self, book_id: int) -> dict:
+        resp = self.session.post(
+            f"{self.base_url}/api/v1/books/{book_id}/read-aloud-jobs", json={}, timeout=30
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_read_aloud_job(self, job_id: str) -> dict:
+        resp = self.session.get(
+            f"{self.base_url}/api/v1/read-aloud-jobs/{job_id}", timeout=30
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def publish_read_aloud_job(self, job_id: str) -> dict:
+        resp = self.session.post(
+            f"{self.base_url}/api/v1/read-aloud-jobs/{job_id}/publish", timeout=30
+        )
+        resp.raise_for_status()
+        return resp.json()
