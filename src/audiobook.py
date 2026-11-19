@@ -85,7 +85,6 @@ def build_m4b(
             "ffmpeg", "-y",
             "-i", str(combined),
             "-i", str(metadata_file),
-            "-map_metadata", "1",
         ]
         if cover_bytes:
             cover_path = tmp / "cover.jpg"
@@ -95,6 +94,7 @@ def build_m4b(
         else:
             cmd += ["-map", "0:a"]
         cmd += [
+            "-map_metadata", "1",
             "-metadata", f"title={title}",
             "-metadata", f"artist={author}",
             "-c:a", "aac", "-b:a", "64k",
