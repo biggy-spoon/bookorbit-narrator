@@ -95,6 +95,18 @@ driver, thermals, or power supply - in our case none of those showed any corrobo
 fault events, no crash dump, temperatures stayed well within normal range), which is itself a symptom of an
 ASPM-class issue: it typically leaves no trace in Windows's own crash reporting.
 
+**Update: this fix was real but not complete for us.** It survived two rounds of synthetic stress testing
+(~40 back-to-back requests, ~40 seconds of continuous load each time) that had reliably crashed the host
+before the change. But a real audiobook conversion - which, depending on how your EPUB is structured, can
+mean *hundreds* of back-to-back requests over several continuous minutes for a single large chapter -
+crashed the same host again afterward, in the same way. Our working theory now is that WSL2's GPU-PV
+virtualized compute path may simply not be stable for *sustained, multi-minute* compute sessions on this
+hardware/driver combination, independent of the ASPM issue, which was real but apparently not the only
+problem. We don't have a confirmed fix for that deeper issue yet. If you hit this, treat GPU offload on a
+Windows+WSL2 host as viable for short bursts but not yet trustworthy for long sustained jobs, and consider
+a native Linux GPU host instead if one is available to you - this project's `GPU_KOKORO_URL` works with any
+OpenAI-compatible Kokoro instance, Windows or not.
+
 ## Known limitations
 
 - No "seamless switch between reading and listening at the same spot" sync — chapter-level audiobooks
