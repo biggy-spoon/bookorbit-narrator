@@ -68,6 +68,33 @@ important caveat about *how* a Wake-on-LAN packet actually has to reach the slee
 specific network (same LAN, a router that forwards it, etc.) - that part is unavoidably your own network's
 setup, not something this project can do for you.
 
+### Troubleshooting: Windows GPU host crashes/hangs a few seconds after inference
+
+If your GPU backend runs on Windows via Docker Desktop + WSL2 (the common setup for a spare gaming PC),
+and the whole machine hangs or silently reboots **not during inference, but a handful of seconds after a
+burst of GPU activity ends**, this is very likely **PCIe ASPM (Active State Power Management)**. A few
+seconds of GPU idle is exactly the kind of gap that triggers the OS/motherboard to drop the GPU's PCIe
+link into a low-power link state (L1/L1 substates); that transition, combined with WSL2's virtualized GPU
+compute path (GPU-PV) still holding the device open, hit a real crash/hang for us twice in a row under a
+sustained synthetic load test, and holding `nvidia-smi`-level utilization/temperature/power logging through
+the exact failure window confirmed the timing: healthy load, healthy idle, then dead ~19 seconds into idle,
+every time - not during the load itself.
+
+Disabling ASPM for the PCIe subsystem fixed it for us (survived the identical test twice after the change,
+having failed twice before it, with nothing else different). On the Windows GPU host, as Administrator:
+
+```powershell
+powercfg /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0
+powercfg /setactive SCHEME_CURRENT
+```
+
+No reboot needed. If you hit intermittent Windows GPU-host crashes with this setup and the timing looks
+similar (fine during inference, dies a few seconds after it stops), try this before suspecting the GPU
+driver, thermals, or power supply - in our case none of those showed any corroborating evidence (no driver
+fault events, no crash dump, temperatures stayed well within normal range), which is itself a symptom of an
+ASPM-class issue: it typically leaves no trace in Windows's own crash reporting.
+
 ## Known limitations
 
 - No "seamless switch between reading and listening at the same spot" sync — chapter-level audiobooks
