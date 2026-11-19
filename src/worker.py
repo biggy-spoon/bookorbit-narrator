@@ -91,7 +91,7 @@ def process_book(
     state: StateStore,
     config: Config,
 ) -> None:
-    book_id = book["bookId"]
+    book_id = book["id"]
     title = book.get("title") or f"Book {book_id}"
     authors = book.get("authors") or []
     author = ", ".join(authors) if authors else "Unknown"

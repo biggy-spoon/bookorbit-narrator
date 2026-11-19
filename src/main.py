@@ -16,9 +16,9 @@ def run_once(client: BookOrbitClient, kokoro: KokoroClient, state: StateStore, c
         tags = book.get("tags") or []
         if cfg.trigger_tag not in tags:
             continue
-        if state.get_status(book["bookId"]) == "processing":
+        if state.get_status(book["id"]) == "processing":
             # A previous run died mid-conversion without updating state; let it retry.
-            logger.warning("book %s stuck in 'processing' from a prior run, retrying", book["bookId"])
+            logger.warning("book %s stuck in 'processing' from a prior run, retrying", book["id"])
         process_book(book, client, kokoro, state, cfg)
 
 
