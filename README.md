@@ -2,10 +2,14 @@
 
 A sidecar service that turns [BookOrbit](https://github.com/bookorbit/bookorbit) ebooks into narrated
 `.m4b` audiobooks using [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI), triggered entirely by
-tagging a book in the BookOrbit dashboard. Built in response to
-[bookorbit/bookorbit#1019](https://github.com/bookorbit/bookorbit/issues/1019) — since that's an
-unassigned feature request with no BookOrbit source access, this does the same job as an external sidecar
-instead of a core-app PR.
+tagging a book in the BookOrbit dashboard. Inspired by two BookOrbit feature requests -
+[#1019](https://github.com/bookorbit/bookorbit/issues/1019) (chapter-level EPUB → audiobook conversion)
+and [#1589](https://github.com/bookorbit/bookorbit/issues/1589) (generating TTS audio ahead of time
+instead of live during reading) - both great ideas, both unassigned feature requests with no BookOrbit
+source access available to build against, so this does the same job as an external sidecar instead of a
+core-app PR. It also chains into BookOrbit's own native read-aloud alignment once the audiobook lands,
+which gets most of the way to what #1589 is after: audio that's already generated and aligned by the time
+you want to listen, not produced live.
 
 ## How it works
 
