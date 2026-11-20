@@ -3,6 +3,10 @@ services:
     build: .
     container_name: bookorbit-kokoro-audiobook
     restart: unless-stopped
+    # Wake-on-LAN sends a broadcast UDP packet, which Docker's default bridge
+    # network won't let escape to the real LAN - host networking is needed for
+    # GPU_WOL_MAC to actually work. A no-op for everyone not using that feature.
+    network_mode: host
     env_file: .env
     volumes:
       - ./data:/data
