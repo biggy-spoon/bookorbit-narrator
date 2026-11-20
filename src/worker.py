@@ -8,6 +8,7 @@ from pathlib import Path
 from audiobook import build_m4b, synthesize_chapter
 from bookorbit_client import BookOrbitClient
 from config import Config
+from ebook_convert import convert_to_epub
 from epub import parse_chapters
 from tts_providers import resolve_tts_client
 from state import StateStore
@@ -25,10 +26,16 @@ def _voice_for(tags: list[str], default_voice: str) -> str:
     return default_voice
 
 
-def _epub_file_id(files: list[dict]) -> int | None:
-    for f in files:
-        if f.get("format", "").lower() in ("epub", "kepub"):
-            return f["id"]
+_CONVERTIBLE_FORMATS = ("azw3", "mobi")
+
+
+def _narratable_file(files: list[dict]) -> tuple[int, str] | None:
+    """Prefers EPUB/KEPUB (no conversion needed) over AZW3/MOBI if a book somehow has
+    both. Returns (file_id, format)."""
+    by_format = {f.get("format", "").lower(): f["id"] for f in files}
+    for fmt in ("epub", "kepub", *_CONVERTIBLE_FORMATS):
+        if fmt in by_format:
+            return by_format[fmt], fmt
     return None
 
 
@@ -97,11 +104,17 @@ def process_book(
     kokoro, used_gpu = resolve_tts_client(config)
 
     try:
-        file_id = _epub_file_id(book.get("files") or [])
-        if file_id is None:
-            raise RuntimeError("no EPUB/KEPUB file found on this book")
+        found = _narratable_file(book.get("files") or [])
+        if found is None:
+            raise RuntimeError("no EPUB/KEPUB/AZW3/MOBI file found on this book")
+        file_id, file_format = found
 
-        epub_bytes = client.download_file(file_id)
+        source_bytes = client.download_file(file_id)
+        if file_format in _CONVERTIBLE_FORMATS:
+            logger.info("book %s (%s): converting %s to EPUB", book_id, title, file_format)
+            epub_bytes = convert_to_epub(source_bytes, file_format)
+        else:
+            epub_bytes = source_bytes
         chapters = parse_chapters(epub_bytes)
         if not chapters:
             raise RuntimeError("no narratable chapters found in EPUB")

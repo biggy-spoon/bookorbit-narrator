@@ -16,8 +16,10 @@ you want to listen, not produced live.
 ## How it works
 
 1. Tag a book `convert-audio` in BookOrbit.
-2. This service polls BookOrbit's API, finds the tag, downloads the book's EPUB, splits it into chapters,
-   and sends each chapter to your Kokoro-FastAPI instance for narration.
+2. This service polls BookOrbit's API, finds the tag, and downloads the book's EPUB/KEPUB (or AZW3/MOBI,
+   converted to EPUB first via Calibre's `ebook-convert` - they already have proper chapter/TOC structure,
+   same as EPUB, so this just normalizes the container format rather than needing a second parser), splits
+   it into chapters, and sends each chapter to your Kokoro-FastAPI instance for narration.
 3. The chapters are muxed into a single `.m4b` with embedded chapter markers and the book's cover, then
    uploaded directly to that exact book via BookOrbit's own file-upload API - no shared folder, no
    watch-and-match step, so there's no ambiguity about which book (or library) it lands in. It's always the
