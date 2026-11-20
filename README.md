@@ -31,6 +31,15 @@ you want to listen, not produced live.
    and click Publish in the dashboard, by BookOrbit's own design — set `AUTO_PUBLISH_READ_ALOUD=true` if
    you'd rather it publish itself.
 
+   **This needs BookOrbit's own read-aloud worker deployed separately** - a different container from
+   anything in this repo, part of BookOrbit itself. Without it, step 6 above does nothing (BookOrbit
+   reports `workerConfigured: false` and our job-creation call is simply never eligible) - the audiobook
+   from steps 1-5 still works fine either way. See BookOrbit's own
+   [docs/READ_ALOUD.md](https://github.com/bookorbit/bookorbit/blob/main/docs/READ_ALOUD.md) for deploying
+   it; in short, set `COMPOSE_PROFILES=read-aloud` plus a shared `READ_ALOUD_WORKER_TOKEN` in BookOrbit's
+   own `.env` and bring its stack back up - the worker service is already defined in BookOrbit's
+   `docker-compose.yml`, just gated behind that profile.
+
 ## Requirements
 
 - A running BookOrbit instance (tested against v3.9.0).
@@ -65,9 +74,13 @@ voice per book by tagging it `voice:<id>` (list available voices with
 
 ## Known limitations
 
-- No "seamless switch between reading and listening at the same spot" sync — chapter-level audiobooks
-  only. That's a much harder alignment problem than converting the text; a reasonable follow-up, not a v1
-  feature.
+- This project itself only produces chapter-level audio — it doesn't implement sentence/paragraph
+  alignment on its own, and that's not a planned feature here. The seamless "switch between reading and
+  listening at the same spot" experience instead comes from chaining into BookOrbit's own native
+  read-aloud alignment worker (see "How it works" above), which is a real, working part of the default
+  setup, not aspirational — confirmed end to end against a real conversion. If you set
+  `GENERATE_READ_ALOUD=false` or don't deploy BookOrbit's read-aloud worker, you get chapter-level
+  audiobooks only, with no sentence-level sync.
 - Chapter detection relies on the EPUB's own spine order and skips documents under ~200 characters of text
   (covers, title pages, nav) — unusually structured EPUBs may need tuning in `src/epub.py`.
 - One book is converted at a time. On CPU, a full novel realistically takes **1.5-2.5 hours** depending on
