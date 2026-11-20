@@ -9,7 +9,7 @@ from audiobook import build_m4b, synthesize_chapter
 from bookorbit_client import BookOrbitClient
 from config import Config
 from epub import parse_chapters
-from kokoro_client import resolve_kokoro_client
+from tts_providers import resolve_tts_client
 from state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ def process_book(
     logger.info("book %s (%s): starting conversion", book_id, title)
     client.bulk_update_tags([book_id], "remove", [config.trigger_tag])
     state.set_status(book_id, "processing")
-    kokoro, used_gpu = resolve_kokoro_client(config)
+    kokoro, used_gpu = resolve_tts_client(config)
 
     try:
         file_id = _epub_file_id(book.get("files") or [])

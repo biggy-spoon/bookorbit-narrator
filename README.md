@@ -68,6 +68,16 @@ See `.env.example` for every setting (tag names, poll interval, default voice, T
 voice per book by tagging it `voice:<id>` (list available voices with
 `curl $KOKORO_URL/audio/voices`) — otherwise `DEFAULT_VOICE` is used.
 
+### Swapping the TTS backend
+
+`TTS_PROVIDER` picks which backend to talk to (`src/tts_registry.py` has the full list). Kokoro is the
+only one implemented today, but it's a deliberate seam: everything that actually calls the TTS backend
+(`src/audiobook.py`, the GPU wake/sleep logic in `src/tts_providers.py`) is written against the
+`TTSClient` interface, not against Kokoro's API specifically. Adding a different, larger model later -
+once you have real GPU compute, which is also what makes a bigger model practical for book-length
+narration in the first place - means implementing `TTSClient` in a new file and adding one line to
+`TTS_PROVIDERS`, not restructuring the pipeline.
+
 ## Known limitations
 
 - This project itself only produces chapter-level audio — it doesn't implement sentence/paragraph

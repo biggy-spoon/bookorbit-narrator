@@ -2,11 +2,14 @@ import os
 import sys
 from dataclasses import dataclass
 
+from tts_registry import TTS_PROVIDERS
+
 
 @dataclass(frozen=True)
 class Config:
     bookorbit_url: str
     bookorbit_api_key: str
+    tts_provider: str
     kokoro_url: str
     default_voice: str
     trigger_tag: str
@@ -41,9 +44,14 @@ def load() -> Config:
     if missing:
         sys.exit(f"Missing required environment variable(s): {', '.join(missing)}")
 
+    tts_provider = os.environ.get("TTS_PROVIDER", "kokoro")
+    if tts_provider not in TTS_PROVIDERS:
+        sys.exit(f"Unknown TTS_PROVIDER '{tts_provider}' - known providers: {', '.join(TTS_PROVIDERS)}")
+
     return Config(
         bookorbit_url=os.environ["BOOKORBIT_URL"].rstrip("/"),
         bookorbit_api_key=os.environ["BOOKORBIT_API_KEY"],
+        tts_provider=tts_provider,
         kokoro_url=os.environ["KOKORO_URL"].rstrip("/"),
         default_voice=os.environ.get("DEFAULT_VOICE", "af_heart"),
         trigger_tag=os.environ.get("TRIGGER_TAG", "convert-audio"),

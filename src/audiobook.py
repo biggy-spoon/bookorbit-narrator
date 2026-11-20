@@ -6,7 +6,8 @@ from pathlib import Path
 from mutagen.mp3 import MP3
 
 from epub import Chapter
-from kokoro_client import KokoroClient, chunk_text
+from kokoro_client import chunk_text
+from tts_providers import TTSClient
 
 
 @dataclass
@@ -23,7 +24,7 @@ def _run(cmd: list[str]) -> None:
 
 
 def synthesize_chapter(
-    chapter: Chapter, voice: str, kokoro: KokoroClient, work_dir: Path, index: int, max_chars: int
+    chapter: Chapter, voice: str, kokoro: TTSClient, work_dir: Path, index: int, max_chars: int
 ) -> RenderedChapter:
     chunks = chunk_text(chapter.text, max_chars)
     chunk_paths: list[Path] = []
