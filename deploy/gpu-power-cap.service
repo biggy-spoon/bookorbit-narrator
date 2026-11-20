@@ -1,0 +1,10 @@
+[Unit]
+Description=Cap NVIDIA GPU power limit below its rated TDP
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nvidia-smi -pl 180
+
+[Install]
+WantedBy=multi-user.target

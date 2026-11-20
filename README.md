@@ -113,8 +113,21 @@ The actual fix, once we moved to bare-metal Linux: **cap the GPU's power limit b
 uncapped default didn't). The crash reproduced identically on both Windows+WSL2 and bare-metal Linux with
 PCIe ASPM disabled, which pointed away from virtualization/OS and toward a power-delivery issue (PSU,
 cable, or the card's own power circuitry) under the bursty, spiky load TTS inference produces - lowering
-the power limit is a cheap, non-destructive fix regardless of which component was actually marginal. Make
-it persistent with `sudo nvidia-smi -pm 1` (persistence mode) or a systemd unit that runs on boot.
+the power limit is a cheap, non-destructive fix regardless of which component was actually marginal.
+
+**The power limit does not survive a reboot** - it silently resets to the card's default on every fresh
+boot (persistence mode, `nvidia-smi -pm 1`, doesn't help here; that only keeps settings across driver
+reloads within a boot, not across a power cycle), which reintroduces the exact crash this is meant to fix
+the next time the host restarts for any reason. `deploy/gpu-power-cap.service` reapplies it on every boot -
+install it with:
+
+```
+sudo cp deploy/gpu-power-cap.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now gpu-power-cap.service
+```
+
+(edit the `-pl` value in that file to whatever's appropriate for your card).
 
 If you want Wake-on-LAN to actually work, two things that are easy to miss:
 - **The GPU host's motherboard firmware needs its own "wake on LAN" setting enabled** (often called
