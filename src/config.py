@@ -26,6 +26,8 @@ class Config:
     gpu_wol_port: int
     gpu_wake_timeout_seconds: int
     gpu_wake_poll_interval_seconds: int
+    gpu_shutdown_url: str | None
+    gpu_shutdown_token: str | None
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -63,4 +65,6 @@ def load() -> Config:
         gpu_wol_port=int(os.environ.get("GPU_WOL_PORT", "9")),
         gpu_wake_timeout_seconds=int(os.environ.get("GPU_WAKE_TIMEOUT_SECONDS", "120")),
         gpu_wake_poll_interval_seconds=int(os.environ.get("GPU_WAKE_POLL_INTERVAL_SECONDS", "5")),
+        gpu_shutdown_url=(os.environ.get("GPU_SHUTDOWN_URL") or "").rstrip("/") or None,
+        gpu_shutdown_token=os.environ.get("GPU_SHUTDOWN_TOKEN") or None,
     )

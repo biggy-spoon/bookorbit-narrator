@@ -64,14 +64,16 @@ def _is_reachable(base_url: str) -> bool:
         return False
 
 
-def resolve_kokoro_client(config) -> KokoroClient:
+def resolve_kokoro_client(config) -> tuple[KokoroClient, bool]:
     """Picks the GPU backend for this book if one is configured and reachable
     (waking it via WoL first if a MAC is set), otherwise falls back to the
     default (CPU) backend. A no-op - returns the default client immediately -
-    when GPU_KOKORO_URL isn't configured, so this is fully opt-in."""
+    when GPU_KOKORO_URL isn't configured, so this is fully opt-in. The second
+    return value says whether the GPU backend was actually picked, so callers
+    can decide whether the GPU host needs to be put back to sleep later."""
     default = KokoroClient(config.kokoro_url)
     if not config.gpu_kokoro_url:
-        return default
+        return default, False
 
     if config.gpu_wol_mac:
         try:
@@ -84,11 +86,11 @@ def resolve_kokoro_client(config) -> KokoroClient:
     while time.monotonic() < deadline:
         if _is_reachable(config.gpu_kokoro_url):
             logger.info("GPU Kokoro host at %s is reachable, using it for this book", config.gpu_kokoro_url)
-            return KokoroClient(config.gpu_kokoro_url)
+            return KokoroClient(config.gpu_kokoro_url), True
         time.sleep(config.gpu_wake_poll_interval_seconds)
 
     logger.warning(
         "GPU Kokoro host at %s did not become reachable within %ss, falling back to %s",
         config.gpu_kokoro_url, config.gpu_wake_timeout_seconds, config.kokoro_url,
     )
-    return default
+    return default, False

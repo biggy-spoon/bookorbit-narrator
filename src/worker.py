@@ -101,7 +101,9 @@ def process_book(
     client: BookOrbitClient,
     state: StateStore,
     config: Config,
-) -> None:
+) -> bool:
+    """Returns whether the GPU backend was used for this book, so the poll loop
+    can decide whether the GPU host needs to be put back to sleep afterward."""
     book_id = book["id"]
     title = book.get("title") or f"Book {book_id}"
     authors = book.get("authors") or []
@@ -110,7 +112,7 @@ def process_book(
     logger.info("book %s (%s): starting conversion", book_id, title)
     client.bulk_update_tags([book_id], "remove", [config.trigger_tag])
     state.set_status(book_id, "processing")
-    kokoro = resolve_kokoro_client(config)
+    kokoro, used_gpu = resolve_kokoro_client(config)
 
     try:
         file_id = _epub_file_id(book.get("files") or [])
@@ -154,7 +156,10 @@ def process_book(
         if config.generate_read_aloud:
             state.start_read_aloud_tracking(book_id)
 
+        return used_gpu
+
     except Exception as exc:  # noqa: BLE001 - report and move on, never crash the poll loop
         logger.exception("book %s (%s): conversion failed", book_id, title)
         client.bulk_update_tags([book_id], "add", [config.failed_tag])
         state.set_status(book_id, "failed", error=str(exc))
+        return used_gpu
