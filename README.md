@@ -17,12 +17,15 @@ instead of a core-app PR.
 4. BookOrbit's own Book Dock import picks it up and attaches it to the existing book (not a duplicate).
 5. The book is re-tagged `audiobook-ready` (or `audiobook-failed`, with the error visible in this
    service's logs and local state, if something went wrong — re-add `convert-audio` to retry).
-6. If `GENERATE_READ_ALOUD=true` (the default), this service then also kicks off BookOrbit's own native
-   "Generate read-aloud books" job on that book — a sentence-level forced-alignment step (local model, no
-   external AI provider) between the new audio and the ebook text, which is what powers synced
-   text-highlighting and seamless reading↔listening in BookOrbit's reader. That job stops at
-   `awaiting_review` and waits for you to check the alignment report and click Publish in the dashboard,
-   by BookOrbit's own design — set `AUTO_PUBLISH_READ_ALOUD=true` if you'd rather it publish itself.
+6. If `GENERATE_READ_ALOUD=true` (the default), this service then watches for BookOrbit's Book Dock to
+   actually attach the new file to the book - which in our own testing took anywhere from a few seconds to
+   **several hours**, so this is a non-blocking check on every poll cycle, never a long wait that would
+   stall other books. Once attached, it kicks off BookOrbit's own native "Generate read-aloud books" job -
+   a sentence-level forced-alignment step (local model, no external AI provider) between the new audio and
+   the ebook text, which is what powers synced text-highlighting and seamless reading↔listening in
+   BookOrbit's reader. That job stops at `awaiting_review` and waits for you to check the alignment report
+   and click Publish in the dashboard, by BookOrbit's own design — set `AUTO_PUBLISH_READ_ALOUD=true` if
+   you'd rather it publish itself.
 
 ## Requirements
 

@@ -4,7 +4,7 @@ import time
 import config as config_module
 from bookorbit_client import BookOrbitClient
 from state import StateStore
-from worker import process_book
+from worker import advance_read_aloud, process_book
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -19,6 +19,11 @@ def run_once(client: BookOrbitClient, state: StateStore, cfg) -> None:
             # A previous run died mid-conversion without updating state; let it retry.
             logger.warning("book %s stuck in 'processing' from a prior run, retrying", book["id"])
         process_book(book, client, state, cfg)
+
+    # Books waiting on Book Dock to attach their new audio, or on a read-aloud job to
+    # finish - checked once per cycle, never blocking the loop above.
+    for book_id, stage, job_id, started_at in state.pending_read_aloud():
+        advance_read_aloud(book_id, stage, job_id, started_at, client, cfg, state)
 
 
 def main() -> None:

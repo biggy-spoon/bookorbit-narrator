@@ -19,6 +19,16 @@ class StateStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS read_aloud_states (
+                    book_id INTEGER PRIMARY KEY,
+                    stage TEXT NOT NULL,
+                    job_id TEXT,
+                    started_at TEXT NOT NULL
+                )
+                """
+            )
 
     @contextmanager
     def _connect(self):
@@ -49,3 +59,34 @@ class StateStore:
                 """,
                 (book_id, status, datetime.now(timezone.utc).isoformat(), error),
             )
+
+    def start_read_aloud_tracking(self, book_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO read_aloud_states (book_id, stage, job_id, started_at)
+                VALUES (?, 'awaiting_audio', NULL, ?)
+                ON CONFLICT(book_id) DO UPDATE SET
+                    stage = 'awaiting_audio', job_id = NULL, started_at = excluded.started_at
+                """,
+                (book_id, datetime.now(timezone.utc).isoformat()),
+            )
+
+    def set_read_aloud_job(self, book_id: int, job_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE read_aloud_states SET stage = 'job_created', job_id = ? WHERE book_id = ?",
+                (job_id, book_id),
+            )
+
+    def clear_read_aloud_tracking(self, book_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM read_aloud_states WHERE book_id = ?", (book_id,))
+
+    def pending_read_aloud(self) -> list[tuple[int, str, str | None, str]]:
+        """Returns (book_id, stage, job_id, started_at) for every book still being tracked."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT book_id, stage, job_id, started_at FROM read_aloud_states"
+            ).fetchall()
+        return rows
