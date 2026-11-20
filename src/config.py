@@ -14,11 +14,9 @@ class Config:
     failed_tag: str
     poll_interval_seconds: int
     max_chars_per_request: int
-    book_dock_path: str
     state_db_path: str
     generate_read_aloud: bool
     auto_publish_read_aloud: bool
-    book_dock_import_timeout_seconds: int
     read_aloud_job_timeout_seconds: int
     gpu_kokoro_url: str | None
     gpu_wol_mac: str | None
@@ -53,11 +51,9 @@ def load() -> Config:
         failed_tag=os.environ.get("FAILED_TAG", "audiobook-failed"),
         poll_interval_seconds=int(os.environ.get("POLL_INTERVAL_SECONDS", "60")),
         max_chars_per_request=int(os.environ.get("MAX_CHARS_PER_REQUEST", "1000")),
-        book_dock_path=os.environ.get("BOOK_DOCK_PATH", "/book-dock"),
         state_db_path=os.environ.get("STATE_DB_PATH", "/data/state.db"),
         generate_read_aloud=_bool_env("GENERATE_READ_ALOUD", True),
         auto_publish_read_aloud=_bool_env("AUTO_PUBLISH_READ_ALOUD", False),
-        book_dock_import_timeout_seconds=int(os.environ.get("BOOK_DOCK_IMPORT_TIMEOUT_SECONDS", "86400")),
         read_aloud_job_timeout_seconds=int(os.environ.get("READ_ALOUD_JOB_TIMEOUT_SECONDS", "1800")),
         gpu_kokoro_url=(os.environ.get("GPU_KOKORO_URL") or "").rstrip("/") or None,
         gpu_wol_mac=os.environ.get("GPU_WOL_MAC") or None,

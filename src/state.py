@@ -60,33 +60,29 @@ class StateStore:
                 (book_id, status, datetime.now(timezone.utc).isoformat(), error),
             )
 
-    def start_read_aloud_tracking(self, book_id: int) -> None:
+    def track_read_aloud_job(self, book_id: int, job_id: str) -> None:
+        """The file was already uploaded directly to this book (no Book Dock wait
+        needed) and a read-aloud job was just created for it - track it here so the
+        poll loop can check on its progress without blocking."""
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO read_aloud_states (book_id, stage, job_id, started_at)
-                VALUES (?, 'awaiting_audio', NULL, ?)
+                VALUES (?, 'job_created', ?, ?)
                 ON CONFLICT(book_id) DO UPDATE SET
-                    stage = 'awaiting_audio', job_id = NULL, started_at = excluded.started_at
+                    stage = 'job_created', job_id = excluded.job_id, started_at = excluded.started_at
                 """,
-                (book_id, datetime.now(timezone.utc).isoformat()),
-            )
-
-    def set_read_aloud_job(self, book_id: int, job_id: str) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                "UPDATE read_aloud_states SET stage = 'job_created', job_id = ? WHERE book_id = ?",
-                (job_id, book_id),
+                (book_id, job_id, datetime.now(timezone.utc).isoformat()),
             )
 
     def clear_read_aloud_tracking(self, book_id: int) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM read_aloud_states WHERE book_id = ?", (book_id,))
 
-    def pending_read_aloud(self) -> list[tuple[int, str, str | None, str]]:
-        """Returns (book_id, stage, job_id, started_at) for every book still being tracked."""
+    def pending_read_aloud(self) -> list[tuple[int, str, str]]:
+        """Returns (book_id, job_id, started_at) for every read-aloud job still being tracked."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT book_id, stage, job_id, started_at FROM read_aloud_states"
+                "SELECT book_id, job_id, started_at FROM read_aloud_states"
             ).fetchall()
         return rows

@@ -43,55 +43,37 @@ def _seconds_since(started_at: str) -> float:
 
 def advance_read_aloud(
     book_id: int,
-    stage: str,
-    job_id: str | None,
+    job_id: str,
     started_at: str,
     client: BookOrbitClient,
     config: Config,
     state: StateStore,
 ) -> None:
-    """One non-blocking check per poll cycle, for one book being tracked toward a
-    read-aloud job. Book Dock's import timing is unpredictable - we've seen it take
-    anywhere from seconds to several hours - so this deliberately never blocks the
-    main poll loop; it just checks in on this book each cycle until it's done or has
-    been waiting long enough that we give up."""
+    """One non-blocking check per poll cycle, for one book's read-aloud alignment job -
+    BookOrbit's own forced-alignment step takes a while, so this checks in once per
+    cycle rather than blocking the main poll loop on it."""
     try:
-        if stage == "awaiting_audio":
-            if client.read_aloud_capability(book_id).get("hasAudio"):
-                job = client.create_read_aloud_job(book_id)
-                state.set_read_aloud_job(book_id, job["id"])
-                logger.info("book %s: read-aloud job %s created", book_id, job["id"])
-                return
-            if _seconds_since(started_at) > config.book_dock_import_timeout_seconds:
-                logger.warning(
-                    "book %s: Book Dock never attached the audio file within %ss, giving up on read-aloud",
-                    book_id, config.book_dock_import_timeout_seconds,
-                )
-                state.clear_read_aloud_tracking(book_id)
+        job = client.get_read_aloud_job(job_id)
+        status = job.get("status")
+        if status == "awaiting_review" or status in _READ_ALOUD_TERMINAL_STATUSES:
+            if status == "awaiting_review" and config.auto_publish_read_aloud:
+                client.publish_read_aloud_job(job_id)
+                logger.info("book %s: read-aloud job %s published automatically", book_id, job_id)
+            elif status == "awaiting_review":
+                logger.info("book %s: read-aloud job %s ready for review in the dashboard", book_id, job_id)
+            elif status in ("completed", "completed_with_warnings"):
+                logger.info("book %s: read-aloud job %s completed (%s)", book_id, job_id, status)
+            else:
+                logger.warning("book %s: read-aloud job %s ended with status %s", book_id, job_id, status)
+            state.clear_read_aloud_tracking(book_id)
             return
-
-        if stage == "job_created":
-            job = client.get_read_aloud_job(job_id)
-            status = job.get("status")
-            if status == "awaiting_review" or status in _READ_ALOUD_TERMINAL_STATUSES:
-                if status == "awaiting_review" and config.auto_publish_read_aloud:
-                    client.publish_read_aloud_job(job_id)
-                    logger.info("book %s: read-aloud job %s published automatically", book_id, job_id)
-                elif status == "awaiting_review":
-                    logger.info("book %s: read-aloud job %s ready for review in the dashboard", book_id, job_id)
-                elif status in ("completed", "completed_with_warnings"):
-                    logger.info("book %s: read-aloud job %s completed (%s)", book_id, job_id, status)
-                else:
-                    logger.warning("book %s: read-aloud job %s ended with status %s", book_id, job_id, status)
-                state.clear_read_aloud_tracking(book_id)
-                return
-            if _seconds_since(started_at) > config.read_aloud_job_timeout_seconds:
-                logger.warning(
-                    "book %s: read-aloud job %s did not finish within %ss, giving up on tracking it "
-                    "(it may still finish on its own - check the dashboard)",
-                    book_id, job_id, config.read_aloud_job_timeout_seconds,
-                )
-                state.clear_read_aloud_tracking(book_id)
+        if _seconds_since(started_at) > config.read_aloud_job_timeout_seconds:
+            logger.warning(
+                "book %s: read-aloud job %s did not finish within %ss, giving up on tracking it "
+                "(it may still finish on its own - check the dashboard)",
+                book_id, job_id, config.read_aloud_job_timeout_seconds,
+            )
+            state.clear_read_aloud_tracking(book_id)
     except Exception:  # noqa: BLE001 - this book's audiobook already succeeded; never crash the poll loop over it
         logger.exception("book %s: read-aloud tracking check failed", book_id)
 
@@ -146,15 +128,19 @@ def process_book(
                 )
 
             output_name = _safe_filename(f"{title} - {author}") + ".m4b"
-            output_path = Path(config.book_dock_path) / output_name
+            output_path = work_dir / output_name
             build_m4b(rendered, title, author, cover, output_path)
 
-        logger.info("book %s (%s): wrote %s", book_id, title, output_path)
+            client.upload_book_file(book_id, output_name, output_path.read_bytes())
+
+        logger.info("book %s (%s): uploaded %s directly to the book", book_id, title, output_name)
         client.bulk_update_tags([book_id], "add", [config.ready_tag])
         state.set_status(book_id, "done")
 
         if config.generate_read_aloud:
-            state.start_read_aloud_tracking(book_id)
+            job = client.create_read_aloud_job(book_id)
+            state.track_read_aloud_job(book_id, job["id"])
+            logger.info("book %s: read-aloud job %s created", book_id, job["id"])
 
         return used_gpu
 

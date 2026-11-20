@@ -16,25 +16,24 @@ you want to listen, not produced live.
 1. Tag a book `convert-audio` in BookOrbit.
 2. This service polls BookOrbit's API, finds the tag, downloads the book's EPUB, splits it into chapters,
    and sends each chapter to your Kokoro-FastAPI instance for narration.
-3. The chapters are muxed into a single `.m4b` with embedded chapter markers and the book's cover, and
-   dropped into BookOrbit's Book Dock folder.
-4. BookOrbit's own Book Dock import picks it up and attaches it to the existing book (not a duplicate).
-5. The book is re-tagged `audiobook-ready` (or `audiobook-failed`, with the error visible in this
+3. The chapters are muxed into a single `.m4b` with embedded chapter markers and the book's cover, then
+   uploaded directly to that exact book via BookOrbit's own file-upload API - no shared folder, no
+   watch-and-match step, so there's no ambiguity about which book (or library) it lands in. It's always the
+   same book you tagged, in the same library, every time.
+4. The book is re-tagged `audiobook-ready` (or `audiobook-failed`, with the error visible in this
    service's logs and local state, if something went wrong — re-add `convert-audio` to retry).
-6. If `GENERATE_READ_ALOUD=true` (the default), this service then watches for BookOrbit's Book Dock to
-   actually attach the new file to the book - which in our own testing took anywhere from a few seconds to
-   **several hours**, so this is a non-blocking check on every poll cycle, never a long wait that would
-   stall other books. Once attached, it kicks off BookOrbit's own native "Generate read-aloud books" job -
-   a sentence-level forced-alignment step (local model, no external AI provider) between the new audio and
-   the ebook text, which is what powers synced text-highlighting and seamless reading↔listening in
-   BookOrbit's reader. That job stops at `awaiting_review` and waits for you to check the alignment report
-   and click Publish in the dashboard, by BookOrbit's own design — set `AUTO_PUBLISH_READ_ALOUD=true` if
-   you'd rather it publish itself.
+5. If `GENERATE_READ_ALOUD=true` (the default), this service immediately kicks off BookOrbit's own native
+   "Generate read-aloud books" job - a sentence-level forced-alignment step (local model, no external AI
+   provider) between the new audio and the ebook text, which is what powers synced text-highlighting and
+   seamless reading↔listening in BookOrbit's reader. That job takes a while to run, so this service checks
+   in on it once per poll cycle rather than blocking. It stops at `awaiting_review` and waits for you to
+   check the alignment report and click Publish in the dashboard, by BookOrbit's own design — set
+   `AUTO_PUBLISH_READ_ALOUD=true` if you'd rather it publish itself.
 
    **This needs BookOrbit's own read-aloud worker deployed separately** - a different container from
-   anything in this repo, part of BookOrbit itself. Without it, step 6 above does nothing (BookOrbit
+   anything in this repo, part of BookOrbit itself. Without it, step 5 above does nothing (BookOrbit
    reports `workerConfigured: false` and our job-creation call is simply never eligible) - the audiobook
-   from steps 1-5 still works fine either way. See BookOrbit's own
+   from steps 1-4 still works fine either way. See BookOrbit's own
    [docs/READ_ALOUD.md](https://github.com/bookorbit/bookorbit/blob/main/docs/READ_ALOUD.md) for deploying
    it; in short, set `COMPOSE_PROFILES=read-aloud` plus a shared `READ_ALOUD_WORKER_TOKEN` in BookOrbit's
    own `.env` and bring its stack back up - the worker service is already defined in BookOrbit's
@@ -51,19 +50,16 @@ you want to listen, not produced live.
 
 1. In BookOrbit, go to **Settings → API Keys** and create a key with:
    - Access level: **write** (bulk tag updates need this; it's not a read-only key)
-   - Permissions: **Library Download**, **Library Edit Metadata**, and **Generate read-aloud books**
-     (the last one is only needed if `GENERATE_READ_ALOUD=true`, the default; it implies Upload)
+   - Permissions: **Library Download**, **Library Edit Metadata**, **Library Upload**, and (only if
+     `GENERATE_READ_ALOUD=true`, the default) **Generate read-aloud books**
    - Admin: off — nothing this service does needs it
    - Optionally scope the key to just the library/libraries you'll tag books in, for least privilege
 
    Copy the key — it's only shown once.
 2. Copy `.env.example` to `.env` and fill in `BOOKORBIT_API_KEY`, and adjust `BOOKORBIT_URL` / `KOKORO_URL`
    to match your setup.
-3. Edit `docker-compose.yml`'s volume mount so the second path (`/DATA/AppData/bookorbit/...`) points at
-   **your** BookOrbit's actual Book Dock folder on the host — this must be the same folder BookOrbit's own
-   Book Dock watcher is watching, shared as a bind mount into both containers.
-4. `docker compose up -d --build`.
-5. Tag a book `convert-audio` in BookOrbit and watch this service's logs
+3. `docker compose up -d --build`.
+4. Tag a book `convert-audio` in BookOrbit and watch this service's logs
    (`docker compose logs -f`).
 
 ## Configuration
@@ -86,28 +82,44 @@ voice per book by tagging it `voice:<id>` (list available voices with
 - One book is converted at a time. On CPU, a full novel realistically takes **1.5-2.5 hours** depending on
   your server's CPU — this is the supported, reliable path today.
 
-## Future feature: GPU offload (experimental, not recommended yet)
+## Optional: GPU offload
 
-The code for this already exists (`GPU_KOKORO_URL`, `GPU_WOL_MAC`, and friends in `.env.example`) and is
-fully optional - it's a no-op for everyone unless you set `GPU_KOKORO_URL`, so it costs nothing to leave in
-place. The idea: point it at a second, GPU-equipped Kokoro-FastAPI instance (optionally woken via
-Wake-on-LAN) and the sidecar uses it instead of your CPU instance when reachable, falling back to CPU
-automatically otherwise.
+The code for this (`GPU_KOKORO_URL`, `GPU_WOL_MAC`, and friends in `.env.example`) is fully optional - a
+no-op for everyone unless you set `GPU_KOKORO_URL`, so it costs nothing to leave in place. The idea: point
+it at a second, GPU-equipped Kokoro-FastAPI instance (optionally woken via Wake-on-LAN, and optionally put
+back to sleep when idle - see below) and the sidecar uses it instead of your CPU instance when reachable,
+falling back to CPU automatically otherwise.
 
-**Status: works great on a native Linux GPU host. Not yet reliable on Windows + WSL2 + Docker Desktop**,
-which is the common "spare gaming PC" setup. We tried this extensively - disabling PCIe ASPM (genuinely
-fixed one real, confirmed failure mode), updating the NVIDIA driver, and capping the GPU's power limit.
-Each change meaningfully *delayed* the crash (from ~2-3 minutes of sustained inference to 20+ minutes and
-68%+ through a real conversion), but a real multi-chapter book eventually crashed the Windows host every
-time we tried it end to end, across five attempts with every mitigation in place - always the same
-signature (no bugcheck, no driver fault event, no crash dump - a true unexplained hard hang characteristic
-of a GPU-PV virtualization bug, not something a config change on our end can fully resolve).
+**Status: proven working end-to-end on a native Linux GPU host** - roughly 5-7x faster than CPU on a
+real novel-length book (25 minutes vs. ~2.25 hours for comparably-sized books on an RTX 2080 Super).
+**Not reliable on Windows + WSL2 + Docker Desktop** - we tried extensively (disabling PCIe ASPM, updating
+the NVIDIA driver, capping the GPU's power limit) and each change delayed but never eliminated a hard host
+crash under sustained inference, always with zero diagnostic evidence (no bugcheck, no crash dump).
 
-If you want to pick this up: a native Linux GPU host (no virtualization layer between the container and
-the driver) should sidestep this entirely and is the path we'd actually recommend if you have one available.
-If you're on Windows and want to help debug the deeper issue, the `nvidia-smi`-polling + `docker logs`
-technique we used to characterize the failures (see the commit history) is the place to start - we ran out
-of configuration-level ideas, not patience.
+The actual fix, once we moved to bare-metal Linux: **cap the GPU's power limit below its rated TDP**
+(`sudo nvidia-smi -pl 180` for a 250W-rated card survived a full book with zero crashes, where the
+uncapped default didn't). The crash reproduced identically on both Windows+WSL2 and bare-metal Linux with
+PCIe ASPM disabled, which pointed away from virtualization/OS and toward a power-delivery issue (PSU,
+cable, or the card's own power circuitry) under the bursty, spiky load TTS inference produces - lowering
+the power limit is a cheap, non-destructive fix regardless of which component was actually marginal. Make
+it persistent with `sudo nvidia-smi -pm 1` (persistence mode) or a systemd unit that runs on boot.
+
+If you want Wake-on-LAN to actually work, two things that are easy to miss:
+- **The GPU host's motherboard firmware needs its own "wake on LAN" setting enabled** (often called
+  something like "PCIE Devices Power On" under ACPI/Power Management in BIOS/UEFI setup) - the OS-level
+  `ethtool -s <iface> wol g` setting alone does nothing if the firmware itself isn't listening for a magic
+  packet while fully powered off.
+- **This container needs `network_mode: host`** (already set in `docker-compose.yml`) - a WoL magic packet
+  is a broadcast UDP packet, and Docker's default bridge network won't let it escape to the real LAN.
+  Without host networking, the sidecar's own wake attempts silently fail and it falls back to CPU every
+  time, even though a manual magic packet sent from the host itself works fine.
+
+### Optional: put the GPU host to sleep when idle
+
+If `GPU_SHUTDOWN_URL` is set, once the GPU backend was used and the tagged-book queue is empty, this
+service asks the GPU host to power off instead of sitting awake idle until the next book - it's woken
+again via WoL next time, same as always. See `deploy/gpu-shutdown-listener/` for the small service to run
+on the GPU host itself, and its README for setup.
 
 ## License
 

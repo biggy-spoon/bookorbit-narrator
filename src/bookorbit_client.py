@@ -46,6 +46,18 @@ class BookOrbitClient:
         resp.raise_for_status()
         return resp.content
 
+    def upload_book_file(self, book_id: int, filename: str, file_bytes: bytes) -> dict:
+        """Attaches a file directly to a specific, already-known book - bypassing Book
+        Dock's folder-watch-and-match entirely, so there's no ambiguity about which
+        book (or which of its duplicates) the file ends up on."""
+        resp = self.session.post(
+            f"{self.base_url}/api/v1/books/{book_id}/files",
+            files={"file": (filename, file_bytes)},
+            timeout=300,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def get_cover(self, book_id: int) -> bytes | None:
         resp = self.session.get(
             f"{self.base_url}/api/v1/books/{book_id}/cover", timeout=30

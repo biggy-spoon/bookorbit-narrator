@@ -21,10 +21,10 @@ def run_once(client: BookOrbitClient, state: StateStore, cfg) -> None:
         if process_book(book, client, state, cfg):
             used_gpu_this_cycle = True
 
-    # Books waiting on Book Dock to attach their new audio, or on a read-aloud job to
-    # finish - checked once per cycle, never blocking the loop above.
-    for book_id, stage, job_id, started_at in state.pending_read_aloud():
-        advance_read_aloud(book_id, stage, job_id, started_at, client, cfg, state)
+    # Books with a read-aloud job still in progress - checked once per cycle, never
+    # blocking the loop above.
+    for book_id, job_id, started_at in state.pending_read_aloud():
+        advance_read_aloud(book_id, job_id, started_at, client, cfg, state)
 
     # The GPU host was used this cycle and the queue it was working through is now
     # empty - no point keeping it awake until the next book shows up, it's woken via
