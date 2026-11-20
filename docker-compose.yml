@@ -1,7 +1,7 @@
 services:
-  bookorbit-kokoro-audiobook:
+  bookorbit-narrator:
     build: .
-    container_name: bookorbit-kokoro-audiobook
+    container_name: bookorbit-narrator
     restart: unless-stopped
     # Wake-on-LAN sends a broadcast UDP packet, which Docker's default bridge
     # network won't let escape to the real LAN - host networking is needed for
